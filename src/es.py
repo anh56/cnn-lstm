@@ -5,7 +5,7 @@ class EarlyStopper:
         self.early_stopping_metrics = early_stopping_metrics
         self.patience = patience
         self.counter = 0
-        self.best_early_stopping_value = float('inf')
+        self.best_early_stopping_value = float('-inf')
 
     def is_early_stop(self, early_stopping_value):
         # only for f1 or mcc for now
