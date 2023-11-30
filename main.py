@@ -12,12 +12,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 from src.data import get_data_loaders
+from src.es import EarlyStopper
 from src.helpers import get_data_location, save_metrics
 from src.train import optimize, test
 from src.optimization import get_optimizer, get_loss
-from src.model import FFNN, get_model
-
-arch = ["ffnn", "cnn", "lstm"]
+from src.model import get_model
 
 
 def gen_tok_pattern():
@@ -35,13 +34,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_file_name", type=str, default="msr-vul.csv")
     parser.add_argument("--cvss_col", type=str)
-    parser.add_argument("--arch", choices=arch, default="ffnn")
+    parser.add_argument("--arch", choices=["ffnn", "cnn", "lstm"], default="ffnn")
     parser.add_argument("--test_size", type=float, default=0.1)
     parser.add_argument("--val_size", type=float, default=0.1)
     parser.add_argument("--out_path", type=str, default="./output")
     parser.add_argument("--num_classes", type=int, default=3)
     parser.add_argument("--optimizer", type=str, default="adam")
-    parser.add_argument("--num_epochs", type=int, default=50)
+    parser.add_argument("--num_epochs", type=int, default=100)
+    parser.add_argument("--early_stopping_metrics", choices=["f1", "mcc", None], default=None)
+    parser.add_argument("--early_stopping_patience", type=int, default=10)
 
     args = parser.parse_args()
     print(json.dumps(vars(args), indent=4))
@@ -56,9 +57,18 @@ def main():
     hidden_size = 64
     momentum = 0.5
 
-    output = Path(args.out_path)
-    output = output / f"{args.cvss_col}_{args.arch}_{opt}_e{num_epochs}"
+    base_output = Path(args.out_path)
+
+    early_stopper = None
+    output = base_output / f"{args.cvss_col}_{args.arch}_{opt}_e{num_epochs}"
+    if args.early_stopping_metrics:
+        early_stopper = EarlyStopper(
+            args.early_stopping_metrics,
+            args.early_stopping_patience
+        )
+        output = base_output / f"{args.cvss_col}_{args.arch}_{opt}_es{args.early_stopping_metrics}"
     output.mkdir(parents=True, exist_ok=True)
+    print(f"Run result will be saved to {output}")
 
     base_path = Path(get_data_location())
     input_file = base_path / args.input_file_name
@@ -158,7 +168,8 @@ def main():
         loss,
         n_epochs=num_epochs,
         model_save_path=output / "best_val_loss.pt",
-        result_save_path=output / f"val.csv"
+        result_save_path=output / f"val.csv",
+        early_stopper=early_stopper
     )
 
     # test
@@ -170,7 +181,7 @@ def main():
         dropout=dropout
     )
 
-    # : load the weights in 'checkpoints/best_val_loss.pt'
+    # load the weights in 'checkpoints/best_val_loss.pt'
     model.load_state_dict(torch.load(output / "best_val_loss.pt"))
 
     # Run test

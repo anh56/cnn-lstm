@@ -14,33 +14,6 @@ import numpy as np
 import random
 
 
-# def setup_env():
-#     use_cuda = torch.cuda.is_available()
-#
-#     if use_cuda:
-#         print("GPU available")
-#     else:
-#         print("GPU *NOT* available. Will use CPU (slow)")
-#
-#     # Seed random generator for repeatibility
-#     seed = 42
-#     random.seed(seed)
-#     np.random.seed(seed)
-#     torch.manual_seed(seed)
-#     torch.cuda.manual_seed_all(seed)
-#
-#     # Download data if not present already
-#     download_and_extract()
-#     compute_mean_and_std()
-#
-#     # Make checkpoints subdir if not existing
-#     os.makedirs("checkpoints", exist_ok=True)
-#
-#     # Make sure we can reach the installed binaries. This is needed for the workspace
-#     if os.path.exists("/data/DLND/C2/landmark_images"):
-#         os.environ['PATH'] = f"{os.environ['PATH']}:/root/.local/bin"
-
-
 def get_data_location():
     """
     Find the location of the dataset, either locally or in the Udacity workspace

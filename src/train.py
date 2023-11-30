@@ -4,6 +4,8 @@ import torch
 import numpy as np
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, matthews_corrcoef
 from tqdm import tqdm
+
+from src.es import EarlyStopper
 from src.helpers import after_subplot, save_metrics, calculate_metrics
 
 
@@ -103,15 +105,17 @@ def valid_one_epoch(valid_dataloader, model, loss):
     return valid_loss, accuracy, precision, recall, f1, mcc
 
 
-def optimize(data_loaders, model, optimizer, loss, n_epochs, model_save_path, result_save_path):
+def optimize(
+    data_loaders, model, optimizer, loss, n_epochs,
+    model_save_path, result_save_path,
+    early_stopper: EarlyStopper | None = None
+):
     valid_loss_min = None
 
     # Learning rate scheduler: setup a learning rate scheduler that
     # reduces the learning rate when the validation loss reaches a
     # plateau
-    # HINT: look here:
     # https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
-    # 
     from torch.optim.lr_scheduler import ExponentialLR
     scheduler = ExponentialLR(optimizer, gamma=0.9)
 
@@ -132,8 +136,6 @@ def optimize(data_loaders, model, optimizer, loss, n_epochs, model_save_path, re
             )
         )
 
-        save_metrics(accuracy, precision, recall, f1, mcc, result_save_path)
-
         # If the validation loss decreases by more than 1%, save the model
         if valid_loss_min is None or (
             (valid_loss_min - valid_loss) / valid_loss_min > 0.01
@@ -141,12 +143,18 @@ def optimize(data_loaders, model, optimizer, loss, n_epochs, model_save_path, re
             print(f"New minimum validation loss: {valid_loss:.6f}. Saving model ...")
 
             # Save the weights to save_path
-            # 
             torch.save(model.state_dict(), model_save_path)
             valid_loss_min = valid_loss
 
         # Update learning rate, i.e., make a step in the learning rate scheduler
         scheduler.step()
+
+        save_metrics(accuracy, precision, recall, f1, mcc, result_save_path)
+        if early_stopper:
+            if early_stopper.is_early_stop(
+                f1 if early_stopper.early_stopping_metrics == "f1" else mcc
+            ):
+                break
 
 
 def one_epoch_test(test_dataloader, model, loss):
