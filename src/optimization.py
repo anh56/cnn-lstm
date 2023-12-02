@@ -3,16 +3,19 @@ import torch.nn as nn
 import torch.optim
 
 
-def get_loss():
+def get_loss(loss_fn):
     """
     Get an instance of the CrossEntropyLoss (useful for classification),
     optionally moving it to the GPU if use_cuda is set to True
     """
 
     # : select a loss appropriate for classification
-    # loss = nn.CrossEntropyLoss()
-    loss = nn.NLLLoss()
+    if loss_fn == "nll":
+        loss = nn.NLLLoss()
+    elif loss_fn == "cross_entropy":
+        loss = nn.CrossEntropyLoss()
 
+    print(f"Using loss {str(loss)}")
     return loss
 
 

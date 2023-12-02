@@ -43,6 +43,7 @@ def main():
     parser.add_argument("--num_epochs", type=int, default=100)
     parser.add_argument("--early_stopping_metrics", choices=["f1", "mcc", None], default=None)
     parser.add_argument("--early_stopping_patience", type=int, default=10)
+    parser.add_argument("--loss_fn", type=str, default="nll")
 
     args = parser.parse_args()
     print(json.dumps(vars(args), indent=4))
@@ -60,13 +61,13 @@ def main():
     base_output = Path(args.out_path)
 
     early_stopper = None
-    output = base_output / f"{args.cvss_col}_{args.arch}_{opt}_e{num_epochs}"
+    output = base_output / f"{args.cvss_col}_{args.arch}_{opt}_{args.loss_fn}_e{num_epochs}"
     if args.early_stopping_metrics:
         early_stopper = EarlyStopper(
             args.early_stopping_metrics,
             args.early_stopping_patience
         )
-        output = base_output / f"{args.cvss_col}_{args.arch}_{opt}_es{args.early_stopping_metrics}"
+        output = base_output / f"{args.cvss_col}_{args.arch}_{opt}_{args.loss_fn}_es{args.early_stopping_metrics}"
     output.mkdir(parents=True, exist_ok=True)
     print(f"Run result will be saved to {output}")
 
@@ -159,7 +160,7 @@ def main():
         weight_decay=weight_decay
     )
 
-    loss = get_loss()
+    loss = get_loss(args.loss_fn)
 
     optimize(
         data_loaders,
