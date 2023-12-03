@@ -8,6 +8,7 @@ import pandas as pd
 
 cols = ["access_vector", "access_complexity", "authentication", "confidentiality",
         "integrity", "availability", "severity"]
+archs = ["ffnn", "cnn", "lstm"]
 
 
 def main():
@@ -18,10 +19,11 @@ def main():
         choices=cols,
         default=""
     )
-    parser.add_argument("--arch", choices=["ffnn", "cnn", "lstm"], default="")
-    parser.add_argument("--optimizer", type=str, default="")
-    parser.add_argument("--early_stopping_metrics", choices=["f1", "mcc"], default="")
-    parser.add_argument("--max", default=False, action='store_true')
+    parser.add_argument("-a", "--arch", choices=archs, default="")
+    parser.add_argument("-opt", "--optimizer", type=str, default="")
+    parser.add_argument("-esm", "--early_stopping_metrics", choices=["f1", "mcc"], default="")
+    parser.add_argument("-m", "--max", default=False, action='store_true')
+    parser.add_argument("-gba", "--group_by_arch", default=False, action='store_true')
 
     args = parser.parse_args()
     print(json.dumps(vars(args), indent=4))
@@ -47,6 +49,11 @@ def main():
     max_f1_run = None
     max_mcc = float("-inf")
     max_mcc_run = None
+
+    group_by_arch = {
+        
+    }
+
     for run in runs:
         test_file = f"{root_dir}/{run}/test.csv"
         cvss = ""

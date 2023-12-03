@@ -59,7 +59,10 @@ def save_metrics(accuracy, precision, recall, f1, mcc, result_save_path):
         outfile = open(result_save_path, 'w')
         outfile.write("accuracy, precision, recall, f1, mcc\n")
     else:
-        outfile = open(result_save_path, 'a')
+        os.remove(result_save_path)
+        print(f"Previous run at {result_save_path} deleted")
+        outfile = open(result_save_path, 'w')
+        outfile.write("accuracy, precision, recall, f1, mcc\n")
     output = (
         f"{round(accuracy, 4)},{round(precision, 4)},{round(recall, 4)},"
         f"{round(f1, 4)},{round(mcc, 4)}\n"

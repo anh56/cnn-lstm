@@ -11,7 +11,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
-from src.data import get_data_loaders
+from src.data import get_data_loaders, get_data, get_features_tf_idf, get_features_tokenizer
 from src.es import EarlyStopper
 from src.helpers import get_data_location, save_metrics
 from src.train import optimize, test
@@ -64,47 +64,14 @@ def main():
     output = base_output / f"{args.cvss_col}_{args.arch}_{opt}_{args.loss_fn}_e{num_epochs}"
     if args.early_stopping_metrics:
         early_stopper = EarlyStopper(
-            args.early_stopping_metrics,
-            args.early_stopping_patience
+            early_stopping_metrics=args.early_stopping_metrics,
+            patience=args.early_stopping_patience
         )
         output = base_output / f"{args.cvss_col}_{args.arch}_{opt}_{args.loss_fn}_es{args.early_stopping_metrics}"
     output.mkdir(parents=True, exist_ok=True)
     print(f"Run result will be saved to {output}")
 
-    base_path = Path(get_data_location())
-    input_file = base_path / args.input_file_name
-
-    df = pd.read_csv(input_file)
-    df = df[["func_before", args.cvss_col]].rename(
-        columns={
-            "func_before": "code",
-            args.cvss_col: "category"
-        }
-    )
-    print(df.shape, Counter(df["category"]).most_common())
-
-    le = LabelEncoder().fit(df.category)
-    df['category'] = le.transform(df['category'])
-    print(df.shape, Counter(df["category"]).most_common())
-
-    train_df, tmp_df = train_test_split(
-        df,
-        test_size=args.test_size + args.val_size,
-        stratify=df.category,
-        random_state=42,
-    )
-
-    val_df, test_df = train_test_split(
-        tmp_df,
-        test_size=args.val_size / (args.test_size + args.val_size),
-        stratify=tmp_df.category,
-        random_state=42
-    )
-
-    train_df.reset_index(inplace=True)
-    val_df.reset_index(inplace=True)
-    test_df.reset_index(inplace=True)
-
+    train_df, test_df, val_df = get_data(args=args)
     x_train = train_df.code.values
     x_val = val_df.code.values
     x_test = test_df.code.values
@@ -112,25 +79,14 @@ def main():
     print("train counter", Counter(train_df.category).most_common())
     print("val counter", Counter(val_df.category).most_common())
     print("test counter", Counter(test_df.category).most_common())
-
-    # code_token_pattern = gen_tok_pattern()
-    vectorizer = TfidfVectorizer()
-    x_train = vectorizer.fit_transform(x_train)
-    x_test = vectorizer.transform(x_test)
-    x_val = vectorizer.transform(x_val)
-    # max_features_row = np.argmax(np.sum(x_train, axis=1))
-    print("len(vectorizer.vocabulary_)", len(vectorizer.vocabulary_))
-
-    x_train_dense = x_train.todense()
-    x_test_dense = x_test.todense()
-    x_val_dense = x_val.todense()
-
-    x_train_tensor = torch.tensor(x_train_dense).float()
-    x_test_tensor = torch.tensor(x_test_dense).float()
-    x_val_tensor = torch.tensor(x_val_dense).float()
     y_train_tensor = torch.tensor(train_df.category.values.astype(np.int32))
     y_test_tensor = torch.tensor(test_df.category.values.astype(np.int32))
     y_val_tensor = torch.tensor(val_df.category.values.astype(np.int32))
+
+    if args.arch == "ffnn":
+        x_train_tensor, x_test_tensor, x_val_tensor, input_size = get_features_tf_idf(x_train, x_test, x_val)
+    else:
+        x_train_tensor, x_test_tensor, x_val_tensor, input_size = get_features_tokenizer(x_train, x_test, x_val)
 
     data_loaders = get_data_loaders(
         x_train_tensor=x_train_tensor,
@@ -146,7 +102,7 @@ def main():
 
     model = get_model(
         arch=args.arch,
-        input_size=x_train_dense.shape[1],
+        input_size=input_size,
         hidden_size=hidden_size,
         num_classes=args.num_classes,
         dropout=dropout
@@ -176,7 +132,7 @@ def main():
     # test
     model = get_model(
         arch=args.arch,
-        input_size=x_train_dense.shape[1],
+        input_size=input_size,
         hidden_size=hidden_size,
         num_classes=args.num_classes,
         dropout=dropout

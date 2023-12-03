@@ -1,10 +1,19 @@
 import math
+from collections import Counter
+
+import numpy as np
+import pandas as pd
 import torch
 import torch.utils.data
 from pathlib import Path
 import multiprocessing
 
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
+from torchtext.data import get_tokenizer
+from torchtext.vocab import build_vocab_from_iterator
 
 from .helpers import get_data_location
 import matplotlib.pyplot as plt
@@ -20,6 +29,102 @@ class CodeDataset(Dataset):
 
     def __getitem__(self, index):
         return self.x_vectorized[index], self.y_encoded[index]
+
+
+def get_data(args):
+    base_path = Path(get_data_location())
+    input_file = base_path / args.input_file_name
+    df = pd.read_csv(input_file)
+    df = df[["func_before", args.cvss_col]].rename(
+        columns={
+            "func_before": "code",
+            args.cvss_col: "category"
+        }
+    )
+    print(df.shape, Counter(df["category"]).most_common())
+    le = LabelEncoder().fit(df.category)
+    df['category'] = le.transform(df['category'])
+    print(df.shape, Counter(df["category"]).most_common())
+    train_df, tmp_df = train_test_split(
+        df,
+        test_size=args.test_size + args.val_size,
+        stratify=df.category,
+        random_state=42,
+    )
+    val_df, test_df = train_test_split(
+        tmp_df,
+        test_size=args.val_size / (args.test_size + args.val_size),
+        stratify=tmp_df.category,
+        random_state=42
+    )
+    train_df.reset_index(inplace=True)
+    val_df.reset_index(inplace=True)
+    test_df.reset_index(inplace=True)
+    print("len(train_df)", len(train_df), "len(test_df)", len(test_df), "len(val_df)", len(val_df))
+    return train_df, test_df, val_df
+
+
+def gen_tok_pattern():
+    single_toks = ['<=', '>=', '<', '>', '\\?', '\\/=', '\\+=', '\\-=', '\\+\\+', '--', '\\*=', '\\+', '-', '\\*',
+                   '\\/', '!=', '==', '=', '!', '&=', '&', '\\%', '\\|\\|', '\\|=', '\\|', '\\$', '\\:']
+
+    single_toks = '(?:' + '|'.join(single_toks) + ')'
+
+    word_toks = '(?:[a-zA-Z0-9]+)'
+
+    return single_toks + '|' + word_toks
+
+
+def get_features_tf_idf(x_train, x_test, x_val):
+    vectorizer = TfidfVectorizer(token_pattern=gen_tok_pattern())
+    x_train = vectorizer.fit_transform(x_train)
+    x_test = vectorizer.transform(x_test)
+    x_val = vectorizer.transform(x_val)
+    print("len(vectorizer.vocabulary_)", len(vectorizer.vocabulary_))
+
+    x_train_dense = x_train.todense()
+    x_test_dense = x_test.todense()
+    x_val_dense = x_val.todense()
+
+    x_train_tensor = torch.tensor(x_train_dense).float()
+    x_test_tensor = torch.tensor(x_test_dense).float()
+    x_val_tensor = torch.tensor(x_val_dense).float()
+
+    input_size = x_train_dense.shape[1]
+    print("Input size:", input_size)
+
+    return x_train_tensor, x_test_tensor, x_val_tensor, input_size
+
+
+def gen_tensor_from_arr(df, text_pipeline):
+    text_list = []
+    for func in df:
+        processed_text = torch.tensor(text_pipeline(func)).float()
+        text_list.append(processed_text)
+
+    return torch.nn.utils.rnn.pad_sequence([torch.tensor(p) for p in text_list], batch_first=True)
+
+
+def get_features_tokenizer(x_train, x_test, x_val):
+    tokenizer = get_tokenizer(tokenizer=None)
+
+    def yield_tokens(data):
+        for func in data:
+            yield tokenizer(func)
+
+    vocab = build_vocab_from_iterator(yield_tokens(np.concatenate((x_train, x_test, x_val))))
+    text_pipeline = lambda x: vocab(tokenizer(x))
+
+    # padding since we need all values to be same size
+    all_tensor = gen_tensor_from_arr(np.concatenate((x_train, x_test, x_val)), text_pipeline)
+
+    x_train_tensor = all_tensor[0:x_train.shape[0]]
+    x_test_tensor = all_tensor[x_train.shape[0]:x_train.shape[0] + x_test.shape[0]]
+    x_val_tensor = all_tensor[x_train.shape[0] + x_test.shape[0]:]
+
+    input_size = x_train_tensor.shape[1]
+    print("Input size:", input_size)
+    return x_train_tensor, x_test_tensor, x_val_tensor, input_size
 
 
 def get_data_loaders(
