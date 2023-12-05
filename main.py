@@ -44,6 +44,7 @@ def main():
     parser.add_argument("--early_stopping_metrics", choices=["f1", "mcc", None], default=None)
     parser.add_argument("--early_stopping_patience", type=int, default=10)
     parser.add_argument("--loss_fn", type=str, default="nll")
+    parser.add_argument("--test_only", default=False, action='store_true')
 
     args = parser.parse_args()
     print(json.dumps(vars(args), indent=4))
@@ -83,10 +84,13 @@ def main():
     y_test_tensor = torch.tensor(test_df.category.values.astype(np.int32))
     y_val_tensor = torch.tensor(val_df.category.values.astype(np.int32))
 
+    vocab_size = 0
     if args.arch == "ffnn":
         x_train_tensor, x_test_tensor, x_val_tensor, input_size = get_features_tf_idf(x_train, x_test, x_val)
     else:
-        x_train_tensor, x_test_tensor, x_val_tensor, input_size = get_features_tokenizer(x_train, x_test, x_val)
+        x_train_tensor, x_test_tensor, x_val_tensor, input_size, vocab_size = get_features_tokenizer(
+            x_train, x_test, x_val
+        )
 
     data_loaders = get_data_loaders(
         x_train_tensor=x_train_tensor,
@@ -105,39 +109,25 @@ def main():
         input_size=input_size,
         hidden_size=hidden_size,
         num_classes=args.num_classes,
-        dropout=dropout
+        dropout=dropout,
+        vocab_size=vocab_size,
+        embedding_dim=100,
+        batch_size=batch_size
     )
 
-    optimizer = get_optimizer(
-        model=model,
-        optimizer=opt,
-        learning_rate=learning_rate,
-        momentum=momentum,
-        weight_decay=weight_decay
-    )
-
-    loss = get_loss(args.loss_fn)
-
-    optimize(
-        data_loaders,
-        model,
-        optimizer,
-        loss,
-        n_epochs=num_epochs,
-        model_save_path=output / "best_val_loss.pt",
-        result_save_path=output / f"val.csv",
-        early_stopper=early_stopper
-    )
+    if not args.test_only:
+        optimizer = get_optimizer(
+            model=model, optimizer=opt, learning_rate=learning_rate,
+            momentum=momentum, weight_decay=weight_decay
+        )
+        loss = get_loss(args.loss_fn)
+        optimize(
+            data_loaders, model, optimizer, loss, n_epochs=num_epochs,
+            model_save_path=output / "best_val_loss.pt", result_save_path=output / f"val.csv",
+            early_stopper=early_stopper
+        )
 
     # test
-    model = get_model(
-        arch=args.arch,
-        input_size=input_size,
-        hidden_size=hidden_size,
-        num_classes=args.num_classes,
-        dropout=dropout
-    )
-
     # load the weights in 'checkpoints/best_val_loss.pt'
     model.load_state_dict(torch.load(output / "best_val_loss.pt"))
 

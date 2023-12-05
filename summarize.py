@@ -50,10 +50,7 @@ def main():
     max_mcc = float("-inf")
     max_mcc_run = None
 
-    group_by_arch = {
-        
-    }
-
+    errors = []
     for run in runs:
         test_file = f"{root_dir}/{run}/test.csv"
         cvss = ""
@@ -63,7 +60,8 @@ def main():
         try:
             test = pd.read_csv(test_file)
         except Exception as exc:
-            print(exc)
+            # print(exc)
+            errors.append(run)
             continue
         if len(test) != 1:
             print(f"{test_file} is invalid.")
@@ -86,6 +84,11 @@ def main():
     if max_mcc_run:
         print("\nMax MCC Run")
         print(f"{max_mcc_run.ljust(35)}\t{list(pd.read_csv(max_mcc_run).iloc[0].to_dict().values())}")
+
+    if errors:
+        print("\nError runs")
+        for err in errors:
+            print(err)
 
 
 if __name__ == '__main__':

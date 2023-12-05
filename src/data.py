@@ -99,7 +99,7 @@ def get_features_tf_idf(x_train, x_test, x_val):
 def gen_tensor_from_arr(df, text_pipeline):
     text_list = []
     for func in df:
-        processed_text = torch.tensor(text_pipeline(func)).float()
+        processed_text = torch.tensor(text_pipeline(func)).int()
         text_list.append(processed_text)
 
     return torch.nn.utils.rnn.pad_sequence([torch.tensor(p) for p in text_list], batch_first=True)
@@ -113,6 +113,8 @@ def get_features_tokenizer(x_train, x_test, x_val):
             yield tokenizer(func)
 
     vocab = build_vocab_from_iterator(yield_tokens(np.concatenate((x_train, x_test, x_val))))
+    print("Vocabulary size:", len(vocab))
+    len(vocab)
     text_pipeline = lambda x: vocab(tokenizer(x))
 
     # padding since we need all values to be same size
@@ -124,7 +126,9 @@ def get_features_tokenizer(x_train, x_test, x_val):
 
     input_size = x_train_tensor.shape[1]
     print("Input size:", input_size)
-    return x_train_tensor, x_test_tensor, x_val_tensor, input_size
+
+
+    return x_train_tensor, x_test_tensor, x_val_tensor, input_size, len(vocab)
 
 
 def get_data_loaders(
