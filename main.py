@@ -49,15 +49,16 @@ def main():
     args = parser.parse_args()
     print(json.dumps(vars(args), indent=4))
 
-    batch_size = 64  # size of the minibatch for stochastic gradient descent (or Adam)
+    batch_size = 16  # size of the minibatch for stochastic gradient descent (or Adam)
     valid_size = 0.2  # fraction of the training data to reserve for validation
     num_epochs = args.num_epochs  # number of epochs for training
-    dropout = 0.001  # dropout for our model
-    learning_rate = 0.05  # Learning rate for SGD (or Adam)
+    dropout = 0.0001  # dropout for our model
+    learning_rate = 0.00001  # Learning rate for SGD (or Adam)
     opt = args.optimizer  # optimizer. 'sgd' or 'adam'
-    weight_decay = 0.001  # regularization. Increase this to combat overfitting
-    hidden_size = 64
-    momentum = 0.5
+    weight_decay = 0.0001  # regularization. Increase this to combat overfitting
+    hidden_size = 32
+    momentum = 0.0001
+    vocab_size = 512
 
     base_output = Path(args.out_path)
 
@@ -84,11 +85,10 @@ def main():
     y_test_tensor = torch.tensor(test_df.category.values.astype(np.int32))
     y_val_tensor = torch.tensor(val_df.category.values.astype(np.int32))
 
-    vocab_size = 0
     if args.arch == "ffnn":
         x_train_tensor, x_test_tensor, x_val_tensor, input_size = get_features_tf_idf(x_train, x_test, x_val)
     else:
-        x_train_tensor, x_test_tensor, x_val_tensor, input_size, vocab_size = get_features_tokenizer(
+        x_train_tensor, x_test_tensor, x_val_tensor, input_size, _ = get_features_tokenizer(
             x_train, x_test, x_val
         )
 

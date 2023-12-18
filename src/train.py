@@ -58,7 +58,6 @@ def valid_one_epoch(valid_dataloader, model, loss):
 
     y_true = []
     y_pred = []
-
     with torch.no_grad():
 
         # set the model to evaluation mode
@@ -90,8 +89,10 @@ def valid_one_epoch(valid_dataloader, model, loss):
                 (1 / (batch_idx + 1)) * (loss_value.data.item() - valid_loss)
             )
             y_true.extend(target.cpu().numpy())
+            # a, b = torch.max(output.data, -1)
+            # c = b.cpu().numpy()
             y_pred.extend(output.cpu().data.max(1)[1].numpy())
-
+            # y_pred_test.extend(output.cpu().data.max(-1)[1].numpy())
     accuracy, precision, recall, f1, mcc = calculate_metrics(y_true, y_pred)
 
     print(

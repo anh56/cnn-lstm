@@ -99,7 +99,10 @@ def get_features_tf_idf(x_train, x_test, x_val):
 def gen_tensor_from_arr(df, text_pipeline):
     text_list = []
     for func in df:
+        # int for cnn
         processed_text = torch.tensor(text_pipeline(func)).int()
+        # float for lstm
+        # processed_text = torch.tensor(text_pipeline(func)).float()
         text_list.append(processed_text)
 
     return torch.nn.utils.rnn.pad_sequence([torch.tensor(p) for p in text_list], batch_first=True)

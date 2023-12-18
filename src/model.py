@@ -30,7 +30,11 @@ def get_model(arch, input_size, hidden_size, num_classes, dropout, vocab_size, e
             input_size=input_size,
             hidden_size=hidden_size,
             num_classes=num_classes,
-            dropout=dropout
+            dropout=dropout,
+            vocab_size=vocab_size,
+            embedding_dim=embedding_dim,
+            num_layers=2,
+            batch_size=batch_size
         )
     print(model)
     return model
@@ -132,23 +136,34 @@ class CNN(nn.Module):
 
 class LSTM(nn.Module):
     def __init__(
-        self, input_size, hidden_size, num_classes: int = 3, dropout: float = 0.1
+        self, input_size, hidden_size, num_classes, dropout,
+        vocab_size, embedding_dim, num_layers, batch_size
     ):
         super(LSTM, self).__init__()
         self.hidden_dim = hidden_size
-        self.num_layers = 2
-        self.lstm = nn.LSTM(input_size, hidden_size, self.num_layers)
+        self.num_layers = num_layers
+        self.batch_size = batch_size
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.lstm = nn.LSTM(
+            input_size=embedding_dim,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            dropout=dropout,
+            batch_first=True,
+            bidirectional=True
+        )
         self.dropout = nn.Dropout(dropout)
-        self.fc = nn.Linear(hidden_size, num_classes)
-        self.log_softmax = nn.LogSoftmax(dim=1)
+        self.fc = nn.Linear(hidden_size * 2, num_classes)
+        # self.log_softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, x):
-        # h_0 = Variable(torch.zeros(1, batch_size, self.hidden_size).cuda())
-        h0 = torch.zeros(self.num_layers, self.hidden_dim).cuda()
-        c0 = torch.zeros(self.num_layers, self.hidden_dim).cuda()
-        out, (final_hidden_state, final_cell_state) = self.lstm(x, (h0, c0))
-        # out = out[-1, :]
+        x = self.embedding(x).float()
+        h0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_dim).cuda()
+        c0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_dim).cuda()
+        out, _ = self.lstm(x, (h0, c0))
         out = self.dropout(out)
-        out = self.fc(out)
-        out = self.log_softmax(out)
+        # out = self.fc(out)
+        out = self.fc(out[:, -1, :])
+        # out = out.view(out.size(0), -1)
+        # out = self.log_softmax(out)
         return out
