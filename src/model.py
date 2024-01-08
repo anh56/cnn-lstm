@@ -5,37 +5,85 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 
-def get_model(arch, input_size, hidden_size, num_classes, dropout, vocab_size, embedding_dim, batch_size):
+def get_model(args, input_size, hidden_size, dropout, vocab_size, embedding_dim, batch_size):
     model = None
-    print(f"Building [{arch}] model")
-    if arch == "ffnn":
-        model = FFNN(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_classes=num_classes,
-            dropout=dropout
-        )
-    elif arch == "cnn":
-        model = CNN(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_classes=num_classes,
-            dropout=dropout,
-            vocab_size=vocab_size,
-            embedding_dim=embedding_dim,
-            batch_size=batch_size
-        )
+    print(f"Building [{args.arch}] model")
+    if args.multitask:
+        match args.arch:
+            case "ffnn":
+                raise NotImplementedError()  # we dont implement ffnn multitask
+            case "cnn":
+                model = CNN_multitask(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    dropout=dropout,
+                    vocab_size=vocab_size,
+                    embedding_dim=embedding_dim,
+                    batch_size=batch_size
+                )
+            case "lstm":
+                model = LSTM_multitask(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    dropout=dropout,
+                    vocab_size=vocab_size,
+                    embedding_dim=embedding_dim,
+                    num_layers=2,
+                    batch_size=batch_size
+                )
+            case "gru":
+                model = GRU_multitask(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    dropout=dropout,
+                    vocab_size=vocab_size,
+                    embedding_dim=embedding_dim,
+                    num_layers=2,
+                    batch_size=batch_size
+                )
+            case _:
+                return
     else:
-        model = LSTM(
-            input_size=input_size,
-            hidden_size=hidden_size,
-            num_classes=num_classes,
-            dropout=dropout,
-            vocab_size=vocab_size,
-            embedding_dim=embedding_dim,
-            num_layers=2,
-            batch_size=batch_size
-        )
+        match args.arch:
+            case "ffnn":
+                model = FFNN(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    num_classes=args.num_classes,
+                    dropout=dropout
+                )
+            case "cnn":
+                model = CNN(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    num_classes=args.num_classes,
+                    dropout=dropout,
+                    vocab_size=vocab_size,
+                    embedding_dim=embedding_dim,
+                    batch_size=batch_size
+                )
+            case "lstm":
+                model = LSTM(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    num_classes=args.num_classes,
+                    dropout=dropout,
+                    vocab_size=vocab_size,
+                    embedding_dim=embedding_dim,
+                    num_layers=3,
+                    batch_size=batch_size
+                )
+            case "gru":
+                model = GRU(
+                    input_size=input_size,
+                    hidden_size=hidden_size,
+                    num_classes=args.num_classes,
+                    dropout=dropout,
+                    vocab_size=vocab_size,
+                    embedding_dim=embedding_dim,
+                    num_layers=2,
+                    batch_size=batch_size
+                )
     print(model)
     return model
 
@@ -67,31 +115,34 @@ class CNN(nn.Module):
     ):
         super(CNN, self).__init__()
         self.embedding_dim = embedding_dim
+        self.stride = 1
+        self.padding = 0
+        self.kernel_size = 3
+        self.dilation = 1
+        self.final_linear_input_size = int(
+            (
+                (
+                    input_size + 2 * self.padding - self.dilation * (
+                    self.kernel_size - 1) - 1
+                ) / self.stride
+            ) + 1
+        ) * batch_size * 2  # conv1d output * batch size * number of dimension in conv1d (2)
+        print("final_linear_input_size", self.final_linear_input_size)
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.conv1 = nn.Conv1d(in_channels=embedding_dim, out_channels=hidden_size, kernel_size=5, padding=2)
-        # self.pool = nn.MaxPool1d(kernel_size=3, stride=3)
+        self.conv1 = nn.Conv1d(
+            in_channels=embedding_dim,
+            out_channels=hidden_size,
+            kernel_size=self.kernel_size,
+            padding=self.padding,
+            stride=self.stride,
+            dilation=self.dilation
+        )
         self.dropout = nn.Dropout(dropout)
-
-        # # Calculate the output size after Conv1d
-        # dummy_input = torch.zeros(1, input_size, dtype=torch.long)
-        # dummy_output = self.conv1(self.embedding(dummy_input).float().permute(0, 2, 1))
-        # output_size = dummy_output.view(1, -1).size(0)
-
-        self.fc = nn.Linear(777536, num_classes)
+        self.fc = nn.Linear(self.final_linear_input_size, num_classes)
         self.log_softmax = nn.LogSoftmax(dim=1)
 
-        # self.conv1d_list = nn.ModuleList([
-        #     nn.Conv1d(in_channels=self.embedding_dim,
-        #               out_channels=num_filters[i],
-        #               kernel_size=filter_sizes[i])
-        #     for i in range(len(filter_sizes))
-        # ])
-        # # Fully-connected layer and Dropout
-        # self.fc = nn.Linear(np.sum(num_filters), num_classes)
-        # self.dropout = nn.Dropout(p=dropout)
-
     def forward(self, x):
-        # print(x.shape)
+        # print("\n\n", x.shape)
         x = self.embedding(x).float()
         # print(x.shape)
         x = x.permute(0, 2, 1)
@@ -104,35 +155,133 @@ class CNN(nn.Module):
         x = self.dropout(x)
         # print(x.shape)
         x = x.view(x.size(0), -1)  # flatten layer
+        # print(x.shape)
         x = self.fc(x)
         # print(x.shape)
         x = self.log_softmax(x)
+        # print(x.shape)
         return x
 
-        # # Get embeddings from `input_ids`. Output shape: (b, max_len, embed_dim)
-        # x_embed = self.embedding(x).float()
-        #
-        # # Permute `x_embed` to match input shape requirement of `nn.Conv1d`.
-        # # Output shape: (b, embed_dim, max_len)
-        # x_reshaped = x_embed.permute(0, 2, 1)
-        #
-        # # Apply CNN and ReLU. Output shape: (b, num_filters[i], L_out)
-        # x_conv_list = [F.relu(conv1d(x_reshaped)) for conv1d in self.conv1d_list]
-        #
-        # # Max pooling. Output shape: (b, num_filters[i], 1)
-        # x_pool_list = [F.max_pool1d(x_conv, kernel_size=x_conv.shape[2])
-        #                for x_conv in x_conv_list]
-        #
-        # # Concatenate x_pool_list to feed the fully connected layer.
-        # # Output shape: (b, sum(num_filters))
-        # x_fc = torch.cat([x_pool.squeeze(dim=2) for x_pool in x_pool_list],
-        #                  dim=1)
-        #
-        # # Compute logits. Output shape: (b, n_classes)
-        # logits = self.fc(self.dropout(x_fc))
-        #
-        # return logits
 
+class MulticlassClassificationHead(nn.Module):
+    def __init__(
+        self, hidden_size,
+        num_labels_per_category=[3, 3, 2, 3, 3, 3, 3]
+    ):
+        super().__init__()
+        self.out_prj = nn.ModuleList(
+            [
+                nn.Linear(hidden_size, num_labels)
+                for num_labels in num_labels_per_category
+            ]
+        )
+
+    def forward(self, x):
+        logits = [layer(x) for layer in self.out_prj]
+        return logits
+
+
+class CNN_multitask(nn.Module):
+    def __init__(
+        self, input_size, hidden_size, dropout,
+        vocab_size, embedding_dim, batch_size
+    ):
+        super(CNN_multitask, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.conv1 = nn.Conv1d(in_channels=embedding_dim, out_channels=hidden_size, kernel_size=5, padding=2)
+        # self.pool = nn.MaxPool1d(kernel_size=3, stride=3)
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(388768, hidden_size)
+        self.log_softmax = nn.LogSoftmax(dim=1)
+        self.classifier = MulticlassClassificationHead(hidden_size)
+
+    def forward(self, x):
+        # print("x org", x.shape)
+        x = self.embedding(x).float()
+        # print("x embed", x.shape)
+        x = x.permute(0, 2, 1)
+        # print("x permute", x.shape)
+        x = self.conv1(x)
+        # print("x conv", x.shape)
+        x = F.relu(x)
+        # print("x relu", x.shape)
+        x = self.dropout(x)
+        x = x.view(x.size(0), -1)  # flatten layer
+        # print("x view", x.shape)
+        x = self.fc(x)
+        # print("x fc", x.shape)
+        x = self.log_softmax(x)
+        # print("x log softmax", x.shape)
+        x = self.classifier(x)
+        # print("len(x)", len(x))
+        return x
+
+
+# class LSTM(nn.Module):
+#     def __init__(
+#         self, input_size, hidden_size, num_classes, dropout,
+#         vocab_size, embedding_dim, num_layers, batch_size
+#     ):
+#         super(LSTM, self).__init__()
+#         self.hidden_dim = hidden_size
+#         self.num_layers = num_layers
+#         self.batch_size = batch_size
+#         self.num_classes = num_classes
+#         self.embedding = nn.Embedding(vocab_size, embedding_dim)
+#         self.lstm = nn.LSTM(
+#             input_size=embedding_dim,
+#             hidden_size=hidden_size,
+#             num_layers=num_layers,
+#             dropout=dropout,
+#             batch_first=True,
+#             bidirectional=True
+#         )
+#         self.fc = nn.Linear(hidden_size * 2, num_classes)
+#         # self.log_softmax = nn.LogSoftmax(dim=1)
+#
+#         # self.relu = nn.ReLU()
+#         if num_classes > 2:
+#             self.fc = nn.Linear(hidden_size * 2, num_classes)
+#             # self.fn = nn.LogSoftmax(dim=1)
+#         else:
+#             self.fc = nn.Linear(hidden_size * 2, 1)
+#             self.fn = nn.Sigmoid()
+#
+#     # def forward(self, x):
+#     #     x = self.embedding(x).float()
+#     #     out, _ = self.lstm(x)
+#     #     out = self.fc(out[:, -1, :])
+#     #     # out = self.log_softmax(out)
+#     #     return out
+#
+#     def forward(self, x):
+#         x = self.embedding(x).float()
+#         out, _ = self.lstm(x)
+#         # print(out.shape)
+#         out = out[:, -1, :]
+#         # print(out.shape)
+#         out = self.relu(out)
+#         print(out)
+#         print(out.shape)
+#
+#         out = self.fc(out)
+#         print(out)
+#         print(out.shape)
+#
+#         out = self.fn(out)
+#         print(out)
+#         print(out.shape)
+#
+#         # print(out)
+#         # match the output
+#         if self.num_classes > 2:
+#             print(out)
+#             print(out.shape)
+#             return out
+#         else:
+#             out = out.squeeze(1)
+#             return out
 
 class LSTM(nn.Module):
     def __init__(
@@ -153,17 +302,97 @@ class LSTM(nn.Module):
             bidirectional=True
         )
         self.dropout = nn.Dropout(dropout)
+        # self.fc = nn.Linear(hidden_size, num_classes)
         self.fc = nn.Linear(hidden_size * 2, num_classes)
         # self.log_softmax = nn.LogSoftmax(dim=1)
 
     def forward(self, x):
         x = self.embedding(x).float()
-        h0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_dim).cuda()
-        c0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_dim).cuda()
-        out, _ = self.lstm(x, (h0, c0))
+        out, _ = self.lstm(x)
         out = self.dropout(out)
-        # out = self.fc(out)
         out = self.fc(out[:, -1, :])
         # out = out.view(out.size(0), -1)
         # out = self.log_softmax(out)
         return out
+
+
+
+class LSTM_multitask(nn.Module):
+    def __init__(
+        self, input_size, hidden_size, dropout,
+        vocab_size, embedding_dim, num_layers, batch_size
+    ):
+        super(LSTM_multitask, self).__init__()
+        self.hidden_dim = hidden_size
+        self.num_layers = num_layers
+        self.batch_size = batch_size
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.lstm = nn.LSTM(
+            input_size=embedding_dim,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            dropout=dropout,
+            batch_first=True,
+            bidirectional=True
+        )
+        self.dropout = nn.Dropout(dropout)
+        # self.fc = nn.Linear(hidden_size, num_classes)
+        self.fc = nn.Linear(hidden_size * 2, hidden_size)
+        # self.log_softmax = nn.LogSoftmax(dim=1)
+        self.classifier = MulticlassClassificationHead(hidden_size)
+
+    def forward(self, x):
+        x = self.embedding(x).float()
+        # print(x.shape)
+        h0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_dim).cuda()
+        c0 = torch.zeros(self.num_layers * 2, x.size(0), self.hidden_dim).cuda()
+        # h0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).cuda()
+        # c0 = torch.zeros(self.num_layers, x.size(0), self.hidden_dim).cuda()
+        out, _ = self.lstm(x, (h0, c0))
+        out = self.dropout(out)
+        # print(out.shape)
+        # out = self.fc(out)
+        out = self.fc(out[:, -1, :])
+        # print(out.shape)
+        # out = out.view(out.size(0), -1)
+        # out = self.log_softmax(out)
+        out = self.classifier(out)
+        return out
+
+
+class GRU(nn.Module):
+    def __init__(
+        self, input_size, hidden_size, num_classes, dropout,
+        vocab_size, embedding_dim, num_layers, batch_size
+    ):
+        super(GRU, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.gru = nn.GRU(
+            input_size=embedding_dim,
+            hidden_size=hidden_size,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout
+        )
+        self.fc = nn.Linear(hidden_size, num_classes)
+        # self.log_softmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, x):
+        # print(x.shape)
+        x = self.embedding(x).float()
+        # print(x.shape)
+        x, _ = self.gru(x)
+        # print(x.shape)
+        # x = self.dropout(x)
+        # print(x.shape)
+        # print(x)
+        # print(x[:, -1, :])
+        x = self.fc(x[:, -1])
+        # print(x.shape)
+        # x = self.log_softmax(x)
+        return x
+
+
+class GRU_multitask(nn.Module):
+    pass

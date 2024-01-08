@@ -29,27 +29,27 @@ def get_data_location():
 
 def calculate_metrics(y_true, y_pred):
     accuracy = accuracy_score(y_true, y_pred)
-    if len(np.unique(y_true)) == 1:
-        precision = accuracy_score(y_true, y_pred)
-        recall = precision
-        f1 = precision
-    elif len(np.unique(np.r_[y_true, y_pred])) == 2:
-
-        precisions = []
-        recalls = []
-
-        for label in np.unique(np.r_[y_true, y_pred]):
-            precisions.append(precision_score(y_true, y_pred, average='binary', pos_label=label))
-            recalls.append(recall_score(y_true, y_pred, average='binary', pos_label=label))
-
-        precision = np.mean(precisions)
-        recall = np.mean(recalls)
-        f1 = (2 * precision * recall) / (precision + recall)
-
-    else:
-        precision = precision_score(y_true, y_pred, average='macro')
-        recall = recall_score(y_true, y_pred, average='macro')
-        f1 = f1_score(y_true, y_pred, average='macro')
+    # if len(np.unique(y_true)) == 1:
+    #     precision = accuracy_score(y_true, y_pred)
+    #     recall = precision
+    #     f1 = precision
+    # elif len(np.unique(np.r_[y_true, y_pred])) == 2:
+    #
+    #     precisions = []
+    #     recalls = []
+    #
+    #     for label in np.unique(np.r_[y_true, y_pred]):
+    #         precisions.append(precision_score(y_true, y_pred, average='binary', pos_label=label))
+    #         recalls.append(recall_score(y_true, y_pred, average='binary', pos_label=label))
+    #
+    #     precision = np.mean(precisions)
+    #     recall = np.mean(recalls)
+    #     f1 = (2 * precision * recall) / (precision + recall)
+    #
+    # else:
+    precision = precision_score(y_true, y_pred, average='macro')
+    recall = recall_score(y_true, y_pred, average='macro')
+    f1 = f1_score(y_true, y_pred, average='macro')
     mcc = matthews_corrcoef(y_true, y_pred)
     return accuracy, precision, recall, f1, mcc
 
@@ -68,6 +68,24 @@ def save_metrics(accuracy, precision, recall, f1, mcc, result_save_path):
         f"{round(f1, 4)},{round(mcc, 4)}\n"
     )
     outfile.write(output)
+    outfile.close()
+
+
+def save_metrics_multitask(metrics: dict, result_save_path):
+    if not os.path.exists(result_save_path):
+        outfile = open(result_save_path, 'w')
+        outfile.write("cvss, accuracy, precision, recall, f1, mcc\n")
+    else:
+        # os.remove(result_save_path)
+        # print(f"Previous run at {result_save_path} deleted")
+        outfile = open(result_save_path, 'a')
+        # outfile.write("cvss, accuracy, precision, recall, f1, mcc\n")
+
+    for cvss, metric in metrics.items():
+        output = (
+            f"{cvss},{','.join(str(i) for i in metric)}\n"
+        )
+        outfile.write(output)
     outfile.close()
 
 
@@ -97,3 +115,10 @@ def plot_confusion_matrix(pred, truth):
         idx = (confusion_matrix == 0)
         confusion_matrix[idx] = np.nan
         sns.heatmap(confusion_matrix, annot=True, ax=sub, linewidths=0.5, linecolor='lightgray', cbar=False)
+
+
+def get_cvss_cols():
+    return [
+        "access_vector", "access_complexity", "authentication", "confidentiality",
+        "integrity", "availability", "severity"
+    ]

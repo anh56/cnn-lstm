@@ -16,6 +16,7 @@ def main():
     parser.add_argument("--all", default=False, action='store_true')
     parser.add_argument(
         "--cvss_col",
+        "-c",
         choices=cols,
         default=""
     )
@@ -24,11 +25,14 @@ def main():
     parser.add_argument("-esm", "--early_stopping_metrics", choices=["f1", "mcc"], default="")
     parser.add_argument("-m", "--max", default=False, action='store_true')
     parser.add_argument("-gba", "--group_by_arch", default=False, action='store_true')
+    parser.add_argument("-mt", "--multitask", default=False, action='store_true')
 
     args = parser.parse_args()
     print(json.dumps(vars(args), indent=4))
 
     root_dir = "./output"
+    if args.multitask:
+        root_dir = "./multitask_output"
     # runs = os.listdir(root_dir)
     runs = glob.glob(
         "*",
@@ -60,22 +64,26 @@ def main():
         try:
             test = pd.read_csv(test_file)
         except Exception as exc:
-            # print(exc)
+            print(exc)
             errors.append(run)
             continue
-        if len(test) != 1:
-            print(f"{test_file} is invalid.")
-            continue
-        metrics = test.iloc[0].to_dict()
-        # print(metrics)
-        print(run, cvss, *list(metrics.values()), sep=",")
-        if args.max:
-            if metrics[" f1"] > max_f1:
-                max_f1 = metrics[" f1"]
-                max_f1_run = test_file
-            if metrics[" mcc"] > max_mcc:
-                max_mcc = metrics[" mcc"]
-                max_mcc_run = test_file
+        if not args.multitask:
+            if len(test) != 1:
+                print(f"{test_file} is invalid.")
+                continue
+            metrics = test.iloc[0].to_dict()
+            # print(metrics)
+            print(run, cvss, *list(metrics.values()), sep=",")
+            if args.max:
+                if metrics[" f1"] > max_f1:
+                    max_f1 = metrics[" f1"]
+                    max_f1_run = test_file
+                if metrics[" mcc"] > max_mcc:
+                    max_mcc = metrics[" mcc"]
+                    max_mcc_run = test_file
+        else:
+            for i in range(1, len(test)):  # skip header
+                print(run, *list(test.iloc[i].to_dict().values()), sep=",")
 
     if max_f1_run:
         print("\nMax F1 Run")

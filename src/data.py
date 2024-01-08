@@ -14,8 +14,9 @@ from sklearn.preprocessing import LabelEncoder
 from torch.utils.data import Dataset
 from torchtext.data import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
+from tqdm import tqdm
 
-from .helpers import get_data_location
+from .helpers import get_data_location, get_cvss_cols
 import matplotlib.pyplot as plt
 
 
@@ -64,6 +65,50 @@ def get_data(args):
     return train_df, test_df, val_df
 
 
+def get_data_multitask(args):
+    base_path = Path(get_data_location())
+    input_file = base_path / args.input_file_name
+    df = pd.read_csv(input_file)
+
+    cvss_cols = get_cvss_cols()
+    selected_cols = cvss_cols + ["func_before"]
+    df = df[selected_cols].rename(
+        columns={
+            "func_before": "code",
+        }
+    )
+    print(df.shape)
+    for cvss in cvss_cols:
+        le = LabelEncoder().fit(df[cvss])
+        df[cvss] = le.transform(df[cvss])
+        print(cvss, Counter(df[cvss]).most_common())
+
+    train_df, tmp_df = train_test_split(
+        df,
+        test_size=args.test_size + args.val_size,
+        # stratify=df[cvss_cols],
+        random_state=42,
+    )
+    val_df, test_df = train_test_split(
+        tmp_df,
+        test_size=args.val_size / (args.test_size + args.val_size),
+        # stratify=[cvss_cols],
+        random_state=42
+    )
+    train_df.reset_index(inplace=True)
+    val_df.reset_index(inplace=True)
+    test_df.reset_index(inplace=True)
+    print("len(train_df)", len(train_df), "len(test_df)", len(test_df), "len(val_df)", len(val_df))
+
+    for cvss in cvss_cols:
+        print(cvss)
+        print("train counter", Counter(train_df[cvss]).most_common())
+        print("val counter", Counter(val_df[cvss]).most_common())
+        print("test counter", Counter(test_df[cvss]).most_common())
+
+    return train_df, test_df, val_df
+
+
 def gen_tok_pattern():
     single_toks = ['<=', '>=', '<', '>', '\\?', '\\/=', '\\+=', '\\-=', '\\+\\+', '--', '\\*=', '\\+', '-', '\\*',
                    '\\/', '!=', '==', '=', '!', '&=', '&', '\\%', '\\|\\|', '\\|=', '\\|', '\\$', '\\:']
@@ -96,16 +141,25 @@ def get_features_tf_idf(x_train, x_test, x_val):
     return x_train_tensor, x_test_tensor, x_val_tensor, input_size
 
 
-def gen_tensor_from_arr(df, text_pipeline):
+def gen_tensor_from_arr(df, text_pipeline, vocab):
     text_list = []
-    for func in df:
+    for func in tqdm(
+        df,
+        total=len(df),
+        leave=True,
+        ncols=80,
+    ):
         # int for cnn
         processed_text = torch.tensor(text_pipeline(func)).int()
-        # float for lstm
-        # processed_text = torch.tensor(text_pipeline(func)).float()
         text_list.append(processed_text)
 
-    return torch.nn.utils.rnn.pad_sequence([torch.tensor(p) for p in text_list], batch_first=True)
+    ret = torch.nn.utils.rnn.pad_sequence(
+        sequences=[torch.tensor(p) for p in text_list],
+        batch_first=True,
+        padding_value=vocab["<pad>"]
+    )
+    print(ret[0])
+    return ret
 
 
 def get_features_tokenizer(x_train, x_test, x_val):
@@ -115,21 +169,29 @@ def get_features_tokenizer(x_train, x_test, x_val):
         for func in data:
             yield tokenizer(func)
 
-    vocab = build_vocab_from_iterator(yield_tokens(np.concatenate((x_train, x_test, x_val))))
+    # handle OOV, unknown is 0 and padding is 1
+    # vocab is only built from train set
+    vocab = build_vocab_from_iterator(yield_tokens(x_train), specials=["<unk>", "<pad>"], special_first=True)
     print("Vocabulary size:", len(vocab))
-    len(vocab)
-    text_pipeline = lambda x: vocab(tokenizer(x))
 
-    # padding since we need all values to be same size
-    all_tensor = gen_tensor_from_arr(np.concatenate((x_train, x_test, x_val)), text_pipeline)
+    def text_pipeline(x):
+        return [vocab[token] if token in vocab else vocab["<unk>"] for token in tokenizer(x)]
 
+    # padding for entire dataset since we need all values to be same size
+    all_tensor = gen_tensor_from_arr(np.concatenate((x_train, x_test, x_val)), text_pipeline, vocab)
+    # print("Generating features")
+    # x_train_tensor = gen_tensor_from_arr(x_train, text_pipeline, vocab)
+    # print(x_train_tensor.shape)
+    # x_test_tensor = gen_tensor_from_arr(x_test, text_pipeline, vocab)
+    # print(x_test_tensor.shape)
+    # x_val_tensor = gen_tensor_from_arr(x_val, text_pipeline, vocab)
+    # print(x_val_tensor.shape)
     x_train_tensor = all_tensor[0:x_train.shape[0]]
     x_test_tensor = all_tensor[x_train.shape[0]:x_train.shape[0] + x_test.shape[0]]
     x_val_tensor = all_tensor[x_train.shape[0] + x_test.shape[0]:]
 
     input_size = x_train_tensor.shape[1]
     print("Input size:", input_size)
-
 
     return x_train_tensor, x_test_tensor, x_val_tensor, input_size, len(vocab)
 

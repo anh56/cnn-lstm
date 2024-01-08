@@ -14,6 +14,8 @@ def get_loss(loss_fn):
         loss = nn.NLLLoss()
     elif loss_fn == "cross_entropy":
         loss = nn.CrossEntropyLoss()
+    elif loss_fn == "bce":
+        loss = nn.BCELoss()
 
     print(f"Using loss {str(loss)}")
     return loss
@@ -48,14 +50,19 @@ def get_optimizer(
         )
 
     elif optimizer.lower() == "adam":
-        # : create an instance of the Adam
+        # create an instance of the Adam
         # optimizer. Use the input parameters learning_rate, momentum
         # and weight_decay
         opt = torch.optim.Adam(
-            # 
             params=model.parameters(),
             lr=learning_rate,
             weight_decay=weight_decay
+        )
+    elif optimizer.lower() == "adamw":
+        opt = torch.optim.AdamW(
+            params=model.parameters(),
+            # lr=learning_rate,
+            # weight_decay=weight_decay
         )
     else:
         raise ValueError(f"Optimizer {optimizer} not supported")
