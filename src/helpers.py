@@ -7,7 +7,7 @@ import torch.utils.data
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, matthews_corrcoef
 from tqdm import tqdm
 import multiprocessing
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 # Let's see if we have an available GPU
 import numpy as np
@@ -89,32 +89,32 @@ def save_metrics_multitask(metrics: dict, result_save_path):
     outfile.close()
 
 
-def after_subplot(ax: plt.Axes, group_name: str, x_label: str):
-    """Add title xlabel and legend to single chart"""
-    ax.set_title(group_name)
-    ax.set_xlabel(x_label)
-    ax.legend(loc="center right")
+# def after_subplot(ax: plt.Axes, group_name: str, x_label: str):
+#     """Add title xlabel and legend to single chart"""
+#     ax.set_title(group_name)
+#     ax.set_xlabel(x_label)
+#     ax.legend(loc="center right")
+#
+#     if group_name.lower() == "loss":
+#         ax.set_ylim([None, 4.5])
 
-    if group_name.lower() == "loss":
-        ax.set_ylim([None, 4.5])
 
-
-def plot_confusion_matrix(pred, truth):
-    import pandas as pd
-    import seaborn as sns
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    gt = pd.Series(truth, name='Ground Truth')
-    predicted = pd.Series(pred, name='Predicted')
-
-    confusion_matrix = pd.crosstab(gt, predicted)
-
-    fig, sub = plt.subplots(figsize=(14, 12))
-    with sns.plotting_context("notebook"):
-        idx = (confusion_matrix == 0)
-        confusion_matrix[idx] = np.nan
-        sns.heatmap(confusion_matrix, annot=True, ax=sub, linewidths=0.5, linecolor='lightgray', cbar=False)
+# def plot_confusion_matrix(pred, truth):
+#     import pandas as pd
+#     # import seaborn as sns
+#     # import matplotlib.pyplot as plt
+#     import numpy as np
+#
+#     gt = pd.Series(truth, name='Ground Truth')
+#     predicted = pd.Series(pred, name='Predicted')
+#
+#     confusion_matrix = pd.crosstab(gt, predicted)
+#
+#     fig, sub = plt.subplots(figsize=(14, 12))
+#     with sns.plotting_context("notebook"):
+#         idx = (confusion_matrix == 0)
+#         confusion_matrix[idx] = np.nan
+#         sns.heatmap(confusion_matrix, annot=True, ax=sub, linewidths=0.5, linecolor='lightgray', cbar=False)
 
 
 def get_cvss_cols():

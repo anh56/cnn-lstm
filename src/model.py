@@ -289,6 +289,7 @@ class LSTM(nn.Module):
         vocab_size, embedding_dim, num_layers, batch_size
     ):
         super(LSTM, self).__init__()
+        self.input_size = input_size
         self.hidden_dim = hidden_size
         self.num_layers = num_layers
         self.batch_size = batch_size
@@ -301,20 +302,24 @@ class LSTM(nn.Module):
             batch_first=True,
             bidirectional=True
         )
-        self.dropout = nn.Dropout(dropout)
-        # self.fc = nn.Linear(hidden_size, num_classes)
-        self.fc = nn.Linear(hidden_size * 2, num_classes)
-        # self.log_softmax = nn.LogSoftmax(dim=1)
+        self.fc = nn.Linear(hidden_size * 2, 1)
+        self.sigmoid = nn.Sigmoid()
+        # self.log_softmax = nn.LogSoftmax()
 
     def forward(self, x):
-        x = self.embedding(x).float()
-        out, _ = self.lstm(x)
-        out = self.dropout(out)
-        out = self.fc(out[:, -1, :])
-        # out = out.view(out.size(0), -1)
-        # out = self.log_softmax(out)
+        embedded = self.embedding(x).float()
+        packed_embedded = nn.utils.rnn.pack_padded_sequence(
+            embedded,
+            torch.full((embedded.size(0),), self.input_size, dtype=torch.long),
+            batch_first=True
+        )
+        packed_output, (hidden_state, cell_state) = self.lstm(packed_embedded)
+        hidden = torch.cat((hidden_state[-2, :, :], hidden_state[-1, :, :]), dim=1)
+        dense_outputs = self.fc(hidden)
+        # Final activation function
+        out = self.sigmoid(dense_outputs)
+        out = out.squeeze(1)
         return out
-
 
 
 class LSTM_multitask(nn.Module):

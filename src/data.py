@@ -17,7 +17,7 @@ from torchtext.vocab import build_vocab_from_iterator
 from tqdm import tqdm
 
 from .helpers import get_data_location, get_cvss_cols
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 
 class CodeDataset(Dataset):

@@ -6,7 +6,7 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from tqdm import tqdm
 
 from src.es import EarlyStopper
-from src.helpers import after_subplot, save_metrics, calculate_metrics, get_cvss_cols, save_metrics_multitask
+from src.helpers import save_metrics, calculate_metrics, get_cvss_cols, save_metrics_multitask
 
 
 def train_one_epoch(train_dataloader, model, optimizer, loss, args):
@@ -105,12 +105,12 @@ def valid_one_epoch(valid_dataloader, model, loss, args):
             y_true.extend(target.cpu().numpy())
             # for binary classification
             # output is a list of probs
-            # if args.num_classes > 2:
-            y_pred.extend(output.cpu().data.max(1)[1].numpy())
-            print("y_true", y_true)
-            print("y_pred", y_pred)
-            # else:
-            # y_pred.extend((output.cpu().data > 0.5).int().numpy())
+            if args.num_classes > 2:
+                y_pred.extend(output.cpu().data.max(1)[1].numpy())
+            else:
+                y_pred.extend((output.cpu().data > 0.5).int().numpy())
+    print("y_true", y_true)
+    print("y_pred", y_pred)
 
     accuracy, precision, recall, f1, mcc = calculate_metrics(y_true, y_pred)
 
